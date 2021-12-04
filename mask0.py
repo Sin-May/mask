@@ -1,10 +1,33 @@
 import cv2
 import time
+import RPi.GPIO
+import threading
+
+RPi.GPIO.setwarnings(False)
+
+RPi.GPIO.setmode(RPi.GPIO.BCM)
+
+RPi.GPIO.setup(26, RPi.GPIO.OUT)
+RPi.GPIO.output(26, False)
+
+RPi.GPIO.setup(4, RPi.GPIO.OUT)
+p=RPi.GPIO.PWM(4, 50)
+
 
 # 导入人脸模型
 face_H = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 # 导入训练好的戴口罩人脸模型
 mask_C = cv2.CascadeClassifier('cascade.xml')
+
+
+def motor():
+    for i in range(1):
+        p.start(0)
+        p.ChangeDutyCycle(11.1)
+        time.sleep(2)
+        p.ChangeDutyCycle(6.1)
+        time.sleep(2)
+        p.ChangeDutyCycle(0)
 
 
 # 帧率
@@ -42,6 +65,8 @@ counter = 0
 while True:
     # 获取摄像头的画面
     # 会得到两个参数，一个是否捕捉到图像（True/False），另一个为存放每帧的图像
+    # 添加一个线程，用于驱动舵机
+    add_thread = threading.Thread(target=motor)
     ret, img = cap.read()  # 读取一帧图像
     # 每帧图像放大1.08倍，重复检测10次
     # 得到人脸，可能不止一个
@@ -51,10 +76,20 @@ while True:
         # 画出人脸框,蓝色，画笔宽度为1
         img = cv2.rectangle(img, (x, y), (x + w, y + h), (255, 64, 64), 1)
         cv2.putText(img, 'no mask', (x, y - 5), font, 0.5, (255, 64, 64), 1)
+        RPi.GPIO.output(26, True)
+
     for (ex, ey, ew, eh) in mask:
         # 画出口罩框，绿色，画笔宽度为1
         cv2.rectangle(img, (int(ex), int(ey)), (int(ex + ew), int(ey + eh)), (0, 255, 0), 1)
         cv2.putText(img, 'mask', (ex, ey - 5), font, 0.5, (0, 255, 0), 1)
+        RPi.GPIO.output(26, False)
+        
+        # 识别到戴口罩，开启线程，转动舵机
+        add_thread.start()
+        cv2.waitKey(1000)
+        # 关闭线程
+        add_thread.join()
+
     # 计算帧率
     Fpsgain()
     # 实时展示画面
